@@ -1,0 +1,52 @@
+name: "Build Gleam WASM"
+description: "Build Gleam WASM Release"
+inputs:
+  version:
+    description: "Build Version"
+    required: true
+
+outputs:
+  archive:
+    description: "Path to build asset"
+    value: "${{ steps.build.outputs.archive }}"
+  files:
+    description: "Path to all files"
+    value: "${{ steps.provenance.outputs.files }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: wasm32-unknown-unknown
+        profile: minimal
+        override: true
+
+    - name: Install wasm-pack
+      shell: bash
+      run: curl -sSL https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+
+    - name: Build wasm
+      shell: bash
+      run: wasm-pack build --release --target web compiler-wasm
+
+    - name: Build wasm archive
+      shell: bash
+      id: build
+      run: |
+        ARCHIVE="gleam-$VERSION-browser.tar.gz"
+
+        tar -C compiler-wasm/pkg/ -czvf $ARCHIVE .
+
+        echo "archive=$ARCHIVE" >> $GITHUB_OUTPUT
+      env:
+        VERSION: "${{ inputs.version }}"
+    
+    - name: "Produce Build Provenance"
+      shell: bash
+      id: provenanve
+      uses: "../build-provenance"
+      with:
+        asset: "${{ steps.build.outputs.archive }}"

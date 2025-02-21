@@ -1,0 +1,109 @@
+name: "Build Gleam"
+description: "Build Gleam Release"
+inputs:
+  version:
+    description: "Build Version"
+    required: true
+  toolchain:
+    description: "Cargo Toolchain"
+    required: true
+  target:
+    description: "Cargo Build Target"
+    required: true
+  os:
+    description: "OS"
+    required: true
+  cargo-tool:
+    description: "Cargo Tool" # TODO: What is this? describe...
+    required: true
+  binary:
+    description: "Binary Path" # TODO: What is this? describe...
+    required: true
+
+outputs:
+  archive:
+    description: "Path to build asset"
+    value: "${{ steps.build.outputs.archive }}"
+  files:
+    description: "Path to all files"
+    value: "${{ steps.provenance.outputs.files }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        target: ${{ inputs.target }}
+
+    - name: Handle Rust dependencies caching
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: v1-${{ inputs.target }}
+
+    - name: Build release binary
+      uses: clechasseur/rs-cargo@v3
+      with:
+        command: build
+        args: --release --target ${{ inputs.target }}
+        tool: ${{ inputs.cargo-tool }}
+
+    - name: Verify binary architecture
+      shell: bash
+      run: |
+        BINARY_PATH="target/${{ inputs.target }}/release/gleam"
+        if [[ "${{ inputs.target }}" == *"windows"* ]]; then
+          BINARY_PATH="${BINARY_PATH}.exe"
+        fi
+
+        if ! file -b "$BINARY_PATH" | grep -q "${{ binary.binary }}"; then
+          echo "error: Architecture mismatch"
+          echo "Expected architecture: '${{ binary.binary }}'"
+          echo "Found binary type: '$(file -b "$BINARY_PATH")'"
+          exit 1
+        fi
+        echo "ok: Architecture match"
+
+    - name: Build archive
+      id: build
+      shell: bash
+      run: |
+        if [ "${{ inputs.os }}" = "windows-latest" ]; then
+          ARCHIVE="gleam-$VERSION-${{ inputs.target }}.zip"
+          cp "target/${{ inputs.target }}/release/gleam.exe" "gleam.exe"
+          7z a "$ARCHIVE" "gleam.exe"
+          rm gleam.exe
+        else
+          ARCHIVE="gleam-$VERSION-${{ inputs.target }}.tar.gz"
+          cp "target/${{ inputs.target }}/release/gleam" "gleam"
+          tar -czvf "$ARCHIVE" "gleam"
+          rm gleam
+        fi
+
+        echo "archive=$ARCHIVE" >> $GITHUB_OUTPUT
+      env:
+        VERSION: "${{ inputs.version }}"
+        
+    - name: Ensure binary successfully boots
+      shell: bash
+      run: |
+        case "${{ inputs.target }}" in
+          x86_64-pc-windows-msvc)
+            7z x "$ARCHIVE"
+            ./gleam.exe --version ;;
+          aarch64*)
+            echo "We cannot test an ARM binary on a AMD64 runner" ;;
+          *)
+            tar -xvzf "$ARCHIVE"
+            ./gleam --version ;;
+        esac
+      env:
+        ARCHIVE: "${{ steps.build.outputs.archive }}"
+    
+    - name: "Produce Build Provenance"
+      shell: bash
+      id: provenanve
+      uses: "../build-provenance"
+      with:
+        asset: "${{ steps.build.outputs.archive }}"
