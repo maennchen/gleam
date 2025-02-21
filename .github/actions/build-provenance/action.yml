@@ -1,0 +1,62 @@
+name: "Build Gleam Build Provenance"
+description: "Build Gleam Build Provenance"
+inputs:
+  asset:
+    description: "Path to build asset"
+    required: true
+
+outputs:
+  files:
+    description: "Path to all files"
+    value: |
+      ${{ inputs.asset }}
+      ${{ inputs.asset }}.sha256
+      ${{ inputs.asset }}.sha512
+      ${{ inputs.asset }}.sigstore
+      ${{ inputs.asset }}.sbom.spdx.json
+      ${{ inputs.asset }}.sbom.cyclonedx.json
+
+runs:
+  using: "composite"
+  steps:
+    - uses: psastras/sbom-rs/actions/install-cargo-sbom@cargo-sbom-v0.9.1
+
+    - name: Generate Build SBoM
+      shell: bash
+      run: |
+        cargo-sbom \
+          --output-format spdx_json_2_3 \
+          > "$ASSET.sbom.spdx.json"
+        
+        cargo-sbom \
+          --output-format cyclone_dx_json_1_4 \
+          > "$ASSET.sbom.cyclonedx.json"
+      env:
+        ASSET: "${{ inputs.asset }}"
+
+    - name: Hash Build Archive
+      shell: bash
+      run: |
+        openssl dgst -r -sha256 -out "$ASSET".sha256 "$ASSET"
+        openssl dgst -r -sha512 -out "$ASSET".sha512 "$ASSET"
+      env:
+        ASSET: "${{ inputs.asset }}"
+
+    - name: Attest Distribution Assets with SBoM
+      id: attest-sbom
+      uses: actions/attest-sbom@v2
+      with:
+        subject-path: |
+          ${{ inputs.asset }}
+          ${{ inputs.asset }}.sbom.spdx.json
+          ${{ inputs.asset }}.sbom.cyclonedx.json
+        sbom-path: "${{ inputs.asset }}.sbom.spdx.json"
+
+    - name: "Copy SBoM provenance"
+      id: sbom-provenance
+      shell: bash
+      run: |
+        cp "$ATTESTATION" "$ASSET.sigstore"
+      env:
+        ASSET: "${{ inputs.asset }}"
+        ATTESTATION: "${{ steps.attest-sbom.outputs.bundle-path }}"
