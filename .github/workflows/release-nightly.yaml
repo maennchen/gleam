@@ -9,6 +9,12 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
+permissions:
+  contents: read
+  releases: write
+  id-token: write
+  attestations: write
+
 jobs:
   nightly-last-run:
     runs-on: ubuntu-latest
@@ -90,89 +96,27 @@ jobs:
         run: |
           ./bin/add-nightly-suffix-to-versions.sh
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: "Build Archive"
+        id: build
+        uses: "./.github/actions/build-native"
         with:
+          version: nightly
           toolchain: ${{ matrix.toolchain }}
           target: ${{ matrix.target }}
-
-      - name: Handle Rust dependencies caching
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: v1-${{ matrix.target }}
-
-      - name: Build release binary
-        uses: clechasseur/rs-cargo@v3
-        with:
-          command: build
-          args: --release --target ${{ matrix.target }}
-          tool: ${{ matrix.cargo-tool }}
-
-      - name: Verify binary architecture
-        shell: bash
-        run: |
-          BINARY_PATH="target/${{ matrix.target }}/release/gleam"
-          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
-            BINARY_PATH="${BINARY_PATH}.exe"
-          fi
-
-          if ! file -b "$BINARY_PATH" | grep -q "${{ matrix.binary }}"; then
-            echo "error: Architecture mismatch"
-            echo "Expected architecture: '${{ matrix.binary }}'"
-            echo "Found binary type: '$(file -b "$BINARY_PATH")'"
-            exit 1
-          fi
-          echo "ok: Architecture match"
-
-      - name: Build archive
-        shell: bash
-        run: |
-          VERSION=nightly
-          DAY=$(date +"%y%m%d")
-
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            ARCHIVE="gleam-$VERSION-${{ matrix.target }}.zip"
-            cp "target/${{ matrix.target }}/release/gleam.exe" "gleam.exe"
-            7z a "$ARCHIVE" "gleam.exe"
-            rm gleam.exe
-          else
-            ARCHIVE="gleam-$VERSION-${{ matrix.target }}.tar.gz"
-            cp "target/${{ matrix.target }}/release/gleam" "gleam"
-            tar -czvf "$ARCHIVE" "gleam"
-            rm gleam
-          fi
-
-          openssl dgst -r -sha256 -out "$ARCHIVE".sha256 "$ARCHIVE"
-          openssl dgst -r -sha512 -out "$ARCHIVE".sha512 "$ARCHIVE"
-          echo "ASSET=$ARCHIVE" >> $GITHUB_ENV
-          echo "DAY=$DAY" >> $GITHUB_ENV
-
-      - name: Ensure binary successfully boots
-        shell: bash
-        run: |
-          case "${{ matrix.target }}" in
-            x86_64-pc-windows-msvc)
-              7z x "$ASSET"
-              ./gleam.exe --version ;;
-            aarch64*)
-              echo "We cannot test an ARM binary on a AMD64 runner" ;;
-            *)
-              tar -xvzf "$ASSET"
-              ./gleam --version ;;
-          esac
+          os: ${{ matrix.os }}
+          cargo-tool: ${{ matrix.cargo-tool }}
+          binary: ${{ matrix.binary }}
 
       - name: Upload release archive
-        shell: bash
-        run: |
-          for i in $(seq 5); do
-            gh release upload nightly --clobber \
-              "${{ env.ASSET }}" \
-              "${{ env.ASSET }}.sha256" \
-              "${{ env.ASSET }}.sha512" \
-            && break
-          done
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # https://github.com/softprops/action-gh-release/issues/445
+        # uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@0bd7e8b279c9b5b36661d552472fbbfe671fe26e
+        with:
+          name: nightly
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: "${{ steps.build.outputs.files }}"
 
       - name: Upload x86_64-unknown-linux-musl artifact
         uses: actions/upload-artifact@v4
