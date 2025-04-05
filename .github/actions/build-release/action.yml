@@ -24,7 +24,7 @@ outputs:
     value: "${{ steps.build.outputs.archive }}"
   files:
     description: "Path to all files"
-    value: |
+    value: >
       ${{ steps.build.outputs.archive }}
       ${{ steps.build.outputs.archive }}.sha256
       ${{ steps.build.outputs.archive }}.sha512
