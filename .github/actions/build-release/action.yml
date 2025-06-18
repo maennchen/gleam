@@ -17,6 +17,15 @@ inputs:
     description: "Expected Binary Architecture"
     required: false
     default: ""
+  azure-client-id:
+    description: "Azure Client ID for Windows Code Signing"
+    required: false
+  azure-client-secret:
+    description: "Azure Client Secret for Windows Code Signing"
+    required: false
+  azure-tenant-id:
+    description: "Azure Tenant ID for Windows Code Signing"
+    required: false
 
 outputs:
   archive:
@@ -132,6 +141,42 @@ runs:
       env:
         TARGET: "${{ inputs.target }}"
         ARCHIVE: "${{ steps.build.outputs.archive }}"
+
+    # We use Azure Trusted Signing to sign the Windows binaries.
+    # This is done to ensure that the binaries are trusted and can be
+    # verified by users and systems that require signed code.
+    #
+    # Why is this helpful?
+    # * It provides a way to verify the authenticity and integrity of the
+    #   binaries distributed by Gleam.
+    # * It helps prevent tampering with the binaries, ensuring that users
+    #   can trust the code they are running.
+    #
+    # For more information, see:
+    # * https://github.com/Azure/trusted-signing-action
+    # * https://azure.microsoft.com/en-us/products/trusted-signing
+    - name: Windows Code Signing
+      if: ${{ contains(inputs.target, '-windows-') && inputs.azure-client-id && inputs.azure-client-secret && inputs.azure-tenant-id }}
+      uses: azure/trusted-signing-action@0d74250c661747df006298d0fb49944c10f16e03 # v0.5.1
+      with:
+        azure-tenant-id: ${{ input.azure-tenant-id }}
+        azure-client-id: ${{ inputs.azure-client-id }}
+        # AZURE_TENANT_ID and AZURE_CLIENT_ID should stay the same,
+        # but AZURE_CLIENT_SECRET has expiration date. When it expires go to
+        # App Registrations / <app> / Certificates & secrets,
+        # click (+) New client secret, note the "Value" (not "Secret ID")
+        # and update it:
+        #
+        # $ gh --repo gleam-lang/gleam secret set AZURE_CLIENT_SECRET
+        azure-client-secret: ${{ inpuits.azure-client-secret }}
+        endpoint: https://eus.codesigning.azure.net/
+        trusted-signing-account-name: trusted-signing-gleam
+        certificate-profile-name: Gleam
+        files-folder: ${{ github.workspace }}
+        files-folder-filter: gleam.exe
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
 
     # By using `cargo-sbom``, we create two formats of Build SBoMs
     # (SPDX and CycloneDX) for the gleam build.
