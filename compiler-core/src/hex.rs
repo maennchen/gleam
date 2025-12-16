@@ -23,6 +23,63 @@ J1i2xWFndWa6nfFnRxZmCStCOZWYYPlaxr+FZceFbpMwzTNs4g3d4tLNUcbKAIH4
 -----END PUBLIC KEY-----
 ";
 
+const HEXPM_STAGING_PUBLIC_KEY: &[u8] = b"-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA56Ac/wvs6VjHOC48BNFO
+WPrxrogxKEvD3DeYWEbJaPvRLtlan9mw5fIjlA5zHsmwyWfItQmOWxayWD1rHPjP
+FW7WHs7h3ceSI6g3sIgsUp5Tw1x1gedPm5n+pkPovfhLGADpi+WmkHLLIIAQUrmP
+7mlRgnfkdizGuqTbG7qmRoGmAXqEiZMNBsm8TtfIsBPUjnZcHizwMdytSkwqfQsP
+K0kbtVsGPpdRKdkf+uMfIG+mJPKrIc0YZdhfAiD2kwmzoij2K01l7TrI/U5g1Yb7
+6O9nw0Y47KB6o9Hzwfkk/KUVPn0hrcGmkbAOKe03PxYTlyrockvEP9Hu6ncGvyby
+FQIDAQAB
+-----END PUBLIC KEY-----
+";
+
+fn use_staging() -> bool {
+    std::env::var("HEX_STAGING")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+}
+
+/// Creates a hexpm Config, using staging if HEX_STAGING=1 is set.
+pub fn config() -> hexpm::Config {
+    let use_staging = use_staging();
+    let config = if use_staging {
+        hexpm::Config {
+            api_base: "https://staging.hex.pm/api/"
+                .parse()
+                .expect("valid staging API URL"),
+            repository_base: "https://repo.staging.hex.pm/"
+                .parse()
+                .expect("valid staging repo URL"),
+        }
+    } else {
+        hexpm::Config::new()
+    };
+    eprintln!(
+        "[DEBUG hex::config] HEX_STAGING={:?}, use_staging={}, config={:?}",
+        std::env::var("HEX_STAGING").ok(),
+        use_staging,
+        config
+    );
+    config
+}
+
+/// Returns the appropriate public key based on HEX_STAGING environment variable.
+pub fn public_key() -> &'static [u8] {
+    let use_staging = use_staging();
+    let key = if use_staging {
+        HEXPM_STAGING_PUBLIC_KEY
+    } else {
+        HEXPM_PUBLIC_KEY
+    };
+    eprintln!(
+        "[DEBUG hex::public_key] use_staging={}, key_len={}",
+        use_staging,
+        key.len()
+    );
+    key
+}
+
 fn key_name(hostname: &str) -> String {
     format!("gleam-{hostname}")
 }
@@ -172,7 +229,7 @@ impl Downloader {
             fs_writer: DebugIgnore(fs_writer),
             http: DebugIgnore(http),
             untar: DebugIgnore(untar),
-            hex_config: hexpm::Config::new(),
+            hex_config: config(),
             paths,
         }
     }

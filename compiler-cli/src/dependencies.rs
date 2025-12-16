@@ -18,7 +18,7 @@ use gleam_core::{
     config::PackageConfig,
     dependency::{self, PackageFetchError},
     error::{FileIoAction, FileKind, ShellCommandFailureReason, StandardIoAction},
-    hex::{self, HEXPM_PUBLIC_KEY},
+    hex,
     io::{HttpClient as _, TarUnpacker, WrappedReader},
     manifest::{Base16Checksum, Manifest, ManifestPackage, ManifestPackageSource, PackageChanges},
     paths::ProjectPaths,
@@ -1093,7 +1093,7 @@ async fn lookup_package(
     match provided.get(name.as_str()) {
         Some(provided_package) => Ok(provided_package.to_manifest_package(name.as_str())),
         None => {
-            let config = hexpm::Config::new();
+            let config = hex::config();
             let release =
                 hex::get_package_release(&name, &version, &config, &HttpClient::new()).await?;
             let build_tools = release
@@ -1183,14 +1183,14 @@ impl dependency::PackageFetcher for PackageFetcher {
         }
 
         tracing::debug!(package = package, "looking_up_hex_package");
-        let config = hexpm::Config::new();
+        let config = hex::config();
         let request = hexpm::repository_v2_get_package_request(package, None, &config);
         let response = self
             .runtime
             .block_on(self.http.send(request))
             .map_err(PackageFetchError::fetch_error)?;
 
-        let pkg = hexpm::repository_v2_get_package_response(response, HEXPM_PUBLIC_KEY)
+        let pkg = hexpm::repository_v2_get_package_response(response, hex::public_key())
             .map_err(PackageFetchError::from)?;
         let pkg = Rc::new(pkg);
         let pkg_ref = Rc::clone(&pkg);

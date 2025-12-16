@@ -17,7 +17,7 @@ pub fn retire(
     message: Option<String>,
 ) -> Result<()> {
     let runtime = tokio::runtime::Runtime::new().expect("Unable to start Tokio async runtime");
-    let config = hexpm::Config::new();
+    let config = hex::config();
     let api_key = HexAuthentication::new(&runtime, config.clone()).get_or_create_api_key()?;
 
     runtime.block_on(hex::retire_release(
@@ -35,7 +35,7 @@ pub fn retire(
 
 pub fn unretire(package: String, version: String) -> Result<()> {
     let runtime = tokio::runtime::Runtime::new().expect("Unable to start Tokio async runtime");
-    let config = hexpm::Config::new();
+    let config = hex::config();
     let api_key = HexAuthentication::new(&runtime, config.clone()).get_or_create_api_key()?;
 
     runtime.block_on(hex::unretire_release(
@@ -76,7 +76,7 @@ pub fn revert(
     }
 
     let runtime = tokio::runtime::Runtime::new().expect("Unable to start Tokio async runtime");
-    let hex_config = hexpm::Config::new();
+    let hex_config = hex::config();
     let api_key = HexAuthentication::new(&runtime, hex_config.clone()).get_or_create_api_key()?;
     let http = HttpClient::new();
 
@@ -94,7 +94,7 @@ pub fn revert(
 pub(crate) fn authenticate() -> Result<()> {
     let runtime = tokio::runtime::Runtime::new().expect("Unable to start Tokio async runtime");
     let http = HttpClient::new();
-    let config = hexpm::Config::new();
+    let config = hex::config();
     let mut auth = HexAuthentication::new(&runtime, config.clone());
     let previous = auth.read_stored_api_key()?;
 
